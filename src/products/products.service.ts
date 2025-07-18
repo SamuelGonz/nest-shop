@@ -14,6 +14,7 @@ import { PaginationDto } from 'src/common/dtos/pagination.dto';
 
 import { validate as isUUID } from 'uuid';
 import { ProductImage, Product } from './entities';
+import { User } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class ProductsService {
@@ -29,15 +30,14 @@ export class ProductsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(createProductDto: CreateProductDto) {
+  async create(createProductDto: CreateProductDto, user: User) {
     try {
       const { images = [], ...productDetails } = createProductDto;
 
       const product = this.productRepository.create({
         ...productDetails,
-        images: images.map((img) =>
-          this.productImageRepository.create({ url: img }),
-        ),
+        user,
+        images: images.map((img) => this.productImageRepository.create({ url: img })),
       });
 
       await this.productRepository.save(product);
@@ -92,12 +92,11 @@ export class ProductsService {
     };
   }
 
-  async update(id: string, updateProductDto: UpdateProductDto) {
+  async update(id: string, updateProductDto: UpdateProductDto, user: User) {
     const { images, ...toUpdate } = updateProductDto;
 
     const product = await this.productRepository.preload({ id, ...toUpdate });
-    if (!product)
-      throw new NotFoundException(`Product with ID ${id} not found`);
+    if (!product) throw new NotFoundException(`Product with ID ${id} not found`);
 
     // Create query runner
     const queryRunner = this.dataSource.createQueryRunner();
@@ -107,11 +106,10 @@ export class ProductsService {
     try {
       if (images) {
         await queryRunner.manager.delete(ProductImage, { product: { id } });
-        product.images = images.map((image) =>
-          this.productImageRepository.create({ url: image }),
-        );
+        product.images = images.map((image) => this.productImageRepository.create({ url: image }));
       }
 
+      product.user = user;
       await queryRunner.manager.save(product);
 
       await queryRunner.commitTransaction();
